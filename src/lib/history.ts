@@ -2,7 +2,7 @@
 
 export type HistoryItem = {
   id: string;
-  type: 'calculator' | 'chat' | 'map';
+  type: 'calculator' | 'chat' | 'map' | 'graph';
   data: any;
   timestamp: number;
   name: string;

@@ -9,7 +9,7 @@ import {
   SidebarMenuButton,
   SidebarFooter,
 } from "@/components/ui/sidebar";
-import { Calculator, MessageSquare, Map, History, Bot } from "lucide-react";
+import { Calculator, MessageSquare, FunctionSquare, History, Bot } from "lucide-react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,7 @@ import { useSidebar } from "@/components/ui/sidebar";
 const menuItems = [
   { href: "/calculator", label: "Calculator", icon: Calculator },
   { href: "/chat", label: "AI Chat", icon: MessageSquare },
-  { href: "/map", label: "Map", icon: Map },
+  { href: "/graph", label: "Graph", icon: FunctionSquare },
   { href: "/history", label: "History", icon: History },
 ];
 

@@ -5,7 +5,7 @@ import html2canvas from 'html2canvas';
 import { HistoryItem, getHistory, deleteHistoryItem, clearHistory } from '@/lib/history';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Calculator, Map as MapIcon, MessageSquare, Share2, Trash2, AlertTriangle } from 'lucide-react';
+import { Calculator, FunctionSquare, MessageSquare, Share2, Trash2, AlertTriangle } from 'lucide-react';
 import Latex from 'react-latex-next';
 import {
   AlertDialog,
@@ -26,7 +26,7 @@ const HistoryCard = ({ item, onShare, onDelete }: { item: HistoryItem, onShare: 
   const icons = {
     calculator: <Calculator className="h-6 w-6 text-primary" />,
     chat: <MessageSquare className="h-6 w-6 text-primary" />,
-    map: <MapIcon className="h-6 w-6 text-primary" />,
+    graph: <FunctionSquare className="h-6 w-6 text-primary" />,
   };
 
   const renderContent = () => {
@@ -46,12 +46,11 @@ const HistoryCard = ({ item, onShare, onDelete }: { item: HistoryItem, onShare: 
             {item.data.messages.length > 4 && <p className='text-center text-muted-foreground'>...</p>}
           </div>
         );
-      case 'map':
+      case 'graph':
         return (
           <div className="text-sm space-y-1">
-            <p><strong>Pins:</strong> {item.data.pins.length}</p>
-            <p><strong>Distance:</strong> {item.data.totalDistance.toFixed(2)} km</p>
-            {item.data.area > 0 && <p><strong>Area:</strong> {(item.data.area / 1000000).toFixed(2)} km²</p>}
+            <p><strong>Function:</strong> <span className="font-mono">{item.data.expression}</span></p>
+            <p><strong>Range:</strong> [{item.data.minX}, {item.data.maxX}]</p>
           </div>
         );
       default:
