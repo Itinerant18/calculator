@@ -34,17 +34,13 @@ const chatWithAiMathAssistantPrompt = ai.definePrompt({
   output: {schema: ChatWithAiMathAssistantOutputSchema},
   prompt: `You are a helpful AI math assistant. You are able to answer questions about math and science, and output LaTeX.
 
-  Context:
+  This is the chat history, with messages from the 'user' and the 'assistant'.
   {{#each history}}
-  {{#if (eq role \"user\")}}
-  User: {{{content}}}
-  {{else}}
-  Assistant: {{{content}}}
-  {{/if}}
+  {{this.role}}: {{{this.content}}}
   {{/each}}
 
-  Question: {{{query}}}
-  Answer: `,
+  User: {{{query}}}
+  Assistant:`,
 });
 
 const chatWithAiMathAssistantFlow = ai.defineFlow(
