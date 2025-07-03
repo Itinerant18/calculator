@@ -29,6 +29,7 @@ type InteractionState =
     | { tool: 'segment', point1Id: string }
     | { tool: 'distance', point1Id: string }
     | { tool: 'polygon', pointIds: string[] }
+    | { tool: 'best-fit', pointIds: string[] }
     | { tool: 'angle', step: 'vertex', pointIds: [] }
     | { tool: 'angle', step: 'arm1', pointIds: [string] }
     | { tool: 'angle', step: 'arm2', pointIds: [string, string] }
@@ -105,8 +106,15 @@ export function GraphCalculator() {
         if (obj.type === 'angle') drawAngle(ctx, obj as Angle, objects, viewTransform.zoom);
       });
 
+      // Draw previews for multi-step tools
+      if (interactionState?.tool === 'segment' || interactionState?.tool === 'distance') {
+        drawInProgressSegment(ctx, interactionState.point1Id, lastMousePos.current.world, objects, viewTransform.zoom);
+      }
       if (interactionState?.tool === 'polygon' && interactionState.pointIds.length > 0) {
-        drawInprogressPolygon(ctx, interactionState.pointIds, lastMousePos.current.world, objects);
+        drawInProgressPolygon(ctx, interactionState.pointIds, lastMousePos.current.world, objects, viewTransform.zoom);
+      }
+      if (interactionState?.tool === 'angle') {
+        drawInProgressAngle(ctx, interactionState, lastMousePos.current.world, objects, viewTransform.zoom);
       }
 
       ctx.restore();
@@ -137,9 +145,8 @@ export function GraphCalculator() {
     ctx.strokeStyle = 'hsl(var(--border))';
     ctx.lineWidth = 1 / zoom;
 
-    // Determine grid step based on zoom level to avoid clutter
     const pixelsPerUnit = zoom;
-    const minGridSpacingPixels = 60; // Aim for at least 60px between grid lines
+    const minGridSpacingPixels = 60;
     const minUnitsPerLine = minGridSpacingPixels / pixelsPerUnit;
 
     const magnitude = Math.pow(10, Math.floor(Math.log10(minUnitsPerLine)));
@@ -160,7 +167,6 @@ export function GraphCalculator() {
     const startYIndex = Math.floor(bounds.minY / step);
     const endYIndex = Math.ceil(bounds.maxY / step);
 
-    // Draw grid lines using an index-based loop to avoid floating point errors
     for (let i = startXIndex; i <= endXIndex; i++) {
         const x = i * step;
         ctx.moveTo(x, bounds.minY);
@@ -173,40 +179,35 @@ export function GraphCalculator() {
         ctx.lineTo(bounds.maxX, y);
     }
     ctx.stroke();
-
-    // Draw labels
+    
     ctx.save();
     ctx.fillStyle = 'hsl(var(--muted-foreground))';
     ctx.font = `${12 / zoom}px sans-serif`;
-    ctx.scale(1, -1); // Flip text to be upright
+    ctx.scale(1, -1);
     
     const labelPadding = 5 / zoom;
-    // Clamp decimal places to avoid floating point issues and toFixed limitations.
-    const decimalPlaces = Math.min(15, Math.max(0, Math.ceil(-Math.log10(step))));
+    const decimalPlaces = Math.max(0, Math.min(15, Math.ceil(-Math.log10(step))));
     
-    // X-axis labels
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
     for (let i = startXIndex; i <= endXIndex; i++) {
         const x = i * step;
-        if (Math.abs(x) > 1e-9) { // Don't draw label at origin
+        if (Math.abs(x) > 1e-9) {
             const label = x.toFixed(decimalPlaces);
             ctx.fillText(label, x, -labelPadding);
         }
     }
     
-    // Y-axis labels
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
     for (let i = startYIndex; i <= endYIndex; i++) {
         const y = i * step;
-        if (Math.abs(y) > 1e-9) { // Don't draw label at origin
+        if (Math.abs(y) > 1e-9) {
             const label = y.toFixed(decimalPlaces);
             ctx.fillText(label, -labelPadding, -y);
         }
     }
     
-    // Origin label
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
     ctx.fillText('0', labelPadding, -labelPadding);
@@ -259,12 +260,13 @@ export function GraphCalculator() {
 
   const drawPoint = (ctx: CanvasRenderingContext2D, point: Point) => {
     ctx.beginPath();
+    const radius = selectedObjectIds.includes(point.id) ? 7 / viewTransform.zoom : 5 / viewTransform.zoom;
     if (point.isDerived) {
         ctx.fillStyle = 'hsl(var(--accent))';
-        ctx.arc(point.x, point.y, 5 / viewTransform.zoom, 0, 2 * Math.PI);
+        ctx.arc(point.x, point.y, radius, 0, 2 * Math.PI);
     } else {
         ctx.fillStyle = 'hsl(var(--primary))';
-        ctx.arc(point.x, point.y, 4 / viewTransform.zoom, 0, 2 * Math.PI);
+        ctx.arc(point.x, point.y, radius, 0, 2 * Math.PI);
     }
     ctx.fill();
   };
@@ -294,7 +296,6 @@ export function GraphCalculator() {
     }
     ctx.closePath();
     
-    // 80 is hex for 50% opacity
     ctx.fillStyle = `${polygon.color}80`;
     ctx.fill();
     ctx.strokeStyle = polygon.color;
@@ -302,14 +303,27 @@ export function GraphCalculator() {
     ctx.stroke();
   };
 
-  const drawInprogressPolygon = (ctx: CanvasRenderingContext2D, pointIds: string[], currentMousePos: {x:number, y:number}, allObjects: GraphObject[]) => {
+  const drawInProgressSegment = (ctx: CanvasRenderingContext2D, point1Id: string, currentMousePos: {x:number, y:number}, allObjects: GraphObject[], zoom: number) => {
+    const p1 = allObjects.find(o => o.id === point1Id) as Point;
+    if (!p1) return;
+    
+    ctx.beginPath();
+    ctx.setLineDash([5 / zoom, 5 / zoom]);
+    ctx.strokeStyle = 'hsl(var(--primary))';
+    ctx.lineWidth = 2 / zoom;
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(currentMousePos.x, currentMousePos.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  };
+
+  const drawInProgressPolygon = (ctx: CanvasRenderingContext2D, pointIds: string[], currentMousePos: {x:number, y:number}, allObjects: GraphObject[], zoom: number) => {
     const points = pointIds.map(id => allObjects.find(o => o.id === id) as Point).filter(Boolean);
     if (points.length === 0) return;
 
     ctx.strokeStyle = 'hsl(var(--primary))';
-    ctx.lineWidth = 2 / viewTransform.zoom;
+    ctx.lineWidth = 2 / zoom;
 
-    // Draw solid lines between existing points
     ctx.beginPath();
     ctx.moveTo(points[0].x, points[0].y);
     for (let i = 1; i < points.length; i++) {
@@ -318,10 +332,9 @@ export function GraphCalculator() {
     ctx.lineTo(currentMousePos.x, currentMousePos.y);
     ctx.stroke();
     
-    // If more than 1 point, draw dashed line from mouse back to start
     if (points.length > 1) {
         ctx.beginPath();
-        ctx.setLineDash([5 / viewTransform.zoom, 5 / viewTransform.zoom]);
+        ctx.setLineDash([5 / zoom, 5 / zoom]);
         ctx.moveTo(currentMousePos.x, currentMousePos.y);
         ctx.lineTo(points[0].x, points[0].y);
         ctx.stroke();
@@ -329,12 +342,40 @@ export function GraphCalculator() {
     }
   };
 
+  const drawInProgressAngle = (ctx: CanvasRenderingContext2D, state: InteractionState, mousePos: {x: number, y: number}, allObjects: GraphObject[], zoom: number) => {
+    if (!state || state.tool !== 'angle' || state.pointIds.length === 0) return;
+
+    ctx.setLineDash([5 / zoom, 5 / zoom]);
+    ctx.strokeStyle = 'hsl(var(--accent))';
+    ctx.lineWidth = 1.5 / zoom;
+    
+    const vertex = allObjects.find(o => o.id === state.pointIds[0]) as Point;
+    if (!vertex) return;
+
+    if (state.step === 'arm1' || state.step === 'arm2') {
+        const arm1Point = allObjects.find(o => o.id === state.pointIds[1]) as Point;
+        if (!arm1Point) return;
+        
+        ctx.beginPath();
+        ctx.moveTo(vertex.x, vertex.y);
+        ctx.lineTo(arm1Point.x, arm1Point.y);
+        ctx.stroke();
+    }
+    
+    ctx.beginPath();
+    ctx.moveTo(vertex.x, vertex.y);
+    ctx.lineTo(mousePos.x, mousePos.y);
+    ctx.stroke();
+    
+    ctx.setLineDash([]);
+  };
+
 
   const drawMeasurement = (ctx: CanvasRenderingContext2D, measurement: Measurement, zoom: number) => {
     ctx.save();
     ctx.font = `${12 / zoom}px Arial`;
     ctx.fillStyle = 'hsl(var(--foreground))';
-    ctx.scale(1, -1); // Flip text back
+    ctx.scale(1, -1);
     ctx.fillText(measurement.label, measurement.x, -measurement.y);
     ctx.restore();
   };
@@ -367,7 +408,6 @@ export function GraphCalculator() {
     ctx.arc(vertex.x, vertex.y, arcRadius, startAngle, endAngle);
     ctx.stroke();
     
-    // Draw text
     const textAngle = startAngle + (angleRad / 2) * (endAngle > startAngle ? 1 : -1);
     const textX = vertex.x + arcRadius * 1.3 * Math.cos(textAngle);
     const textY = vertex.y + arcRadius * 1.3 * Math.sin(textAngle);
@@ -398,7 +438,6 @@ export function GraphCalculator() {
         } catch (e) {}
       }
     });
-    // Check if click is close enough to the function line
     if (closestFunc && minDistance < 1 / viewTransform.zoom * 20) {
         return closestFunc;
     }
@@ -533,6 +572,16 @@ export function GraphCalculator() {
     const clickedPoint = findClosestPoint(worldPos);
 
     switch (activeTool) {
+      case 'select': {
+        const clickedObject = findClosestObject(worldPos);
+        if (clickedObject) {
+          setSelectedObjectIds([clickedObject.id]);
+        } else {
+          clearSelection();
+        }
+        break;
+      }
+
       case 'point':
         addPoint(worldPos.x, worldPos.y);
         break;
@@ -555,23 +604,18 @@ export function GraphCalculator() {
           const clickedOnExistingPoint = findClosestPoint(worldPos);
           
           if (!interactionState || interactionState.tool !== 'polygon') {
-              // Start a new polygon
               const pointId = clickedOnExistingPoint?.id ?? addPoint(worldPos.x, worldPos.y, true);
               setInteractionState({ tool: 'polygon', pointIds: [pointId] });
               toast({ description: 'First point selected. Click to add more vertices or click the first point to finish.' });
           } else {
-              // Continue polygon
               const firstPointId = interactionState.pointIds[0];
               
-              // Check if user clicked the first point to close the polygon
               if (clickedOnExistingPoint && clickedOnExistingPoint.id === firstPointId && interactionState.pointIds.length > 2) {
                   addPolygon(interactionState.pointIds);
                   setInteractionState(null);
                   toast({ title: 'Polygon created.' });
               } else {
-                  // Add a new point to the polygon
                   const newPointId = clickedOnExistingPoint?.id ?? addPoint(worldPos.x, worldPos.y, true);
-                  // Avoid adding the same point twice in a row
                   if (newPointId === interactionState.pointIds[interactionState.pointIds.length - 1]) return;
                   
                   setInteractionState({
@@ -666,6 +710,25 @@ export function GraphCalculator() {
             }
         } else {
             toast({ variant: 'destructive', title: 'No function selected.' });
+        }
+        break;
+      }
+
+      case 'best-fit': {
+        if (clickedPoint) {
+            const currentPoints = (interactionState?.tool === 'best-fit' && interactionState.pointIds) || [];
+            if (currentPoints.includes(clickedPoint.id)) return; // Don't add same point twice
+            
+            const newPointIds = [...currentPoints, clickedPoint.id];
+            setInteractionState({tool: 'best-fit', pointIds: newPointIds});
+
+            if (newPointIds.length >= 2) {
+                const pointsToFit = newPointIds.map(id => objects.find(o => o.id === id) as Point);
+                addOrUpdateBestFitLine(pointsToFit);
+            }
+            toast({description: `Point added. Select at least ${2 - newPointIds.length} more.`})
+        } else {
+            toast({variant: 'destructive', description: 'Please click on a point.'});
         }
         break;
       }
@@ -777,6 +840,52 @@ export function GraphCalculator() {
     setObjects(prev => [...prev, newAngle]);
   };
 
+  const calculateLinearRegression = (points: Point[]): { m: number, b: number } | null => {
+    if (points.length < 2) return null;
+    let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+    const n = points.length;
+
+    for (const p of points) {
+        sumX += p.x;
+        sumY += p.y;
+        sumXY += p.x * p.y;
+        sumX2 += p.x * p.x;
+    }
+
+    const denominator = n * sumX2 - sumX * sumX;
+    if (Math.abs(denominator) < 1e-9) return null; // Avoid division by zero (vertical line)
+
+    const m = (n * sumXY - sumX * sumY) / denominator;
+    const b = (sumY - m * sumX) / n;
+
+    return { m, b };
+  }
+
+  const addOrUpdateBestFitLine = (points: Point[]) => {
+    const regression = calculateLinearRegression(points);
+    if (!regression) return;
+
+    const { m, b } = regression;
+    const expression = `${m.toFixed(4)} * x + ${b.toFixed(4)}`;
+    const BEST_FIT_LINE_ID = 'best-fit-line';
+
+    setObjects(prev => {
+        const existingLine = prev.find(o => o.id === BEST_FIT_LINE_ID);
+        if (existingLine) {
+            return prev.map(o => o.id === BEST_FIT_LINE_ID ? { ...o, expression, compiled: math.parse(expression).compile() } : o);
+        } else {
+            const newLine: Func = {
+                id: BEST_FIT_LINE_ID,
+                type: 'function',
+                expression,
+                compiled: math.parse(expression).compile(),
+                color: 'hsl(var(--destructive))',
+            };
+            return [...prev, newLine];
+        }
+    });
+  };
+
   const updateObject = (id: string, updates: Partial<GraphObject>) => {
     setObjects(prev => prev.map(obj => {
       if (obj.id === id) {
@@ -796,31 +905,26 @@ export function GraphCalculator() {
 
   const deleteObject = (id: string) => {
     setObjects(prev => {
+        const idsToDelete = new Set([id]);
         const objectToDelete = prev.find(o => o.id === id);
-        let idsToDelete = new Set([id]);
 
-        // If a point is deleted, also delete segments and polygons connected to it
         if (objectToDelete?.type === 'point') {
             prev.forEach(obj => {
-                if (obj.type === 'segment' && (obj.point1Id === id || obj.point2Id === id)) {
-                    idsToDelete.add(obj.id);
-                }
-                if (obj.type === 'polygon' && obj.pointIds.includes(id)) {
-                    idsToDelete.add(obj.id);
-                }
-                if (obj.type === 'angle' && (obj.arm1PointId === id || obj.vertexPointId === id || obj.arm2PointId === id)) {
+                if ((obj.type === 'segment' && (obj.point1Id === id || obj.point2Id === id)) ||
+                    (obj.type === 'polygon' && obj.pointIds.includes(id)) ||
+                    (obj.type === 'angle' && [obj.vertexPointId, obj.arm1PointId, obj.arm2PointId].includes(id))) {
                     idsToDelete.add(obj.id);
                 }
             });
         }
-        // Also remove derived points that depend on a function being deleted
         if (objectToDelete?.type === 'function') {
             prev.forEach(obj => {
                 if(obj.type === 'point' && obj.isDerived) {
-                    idsToDelete.add(obj.id)
+                    idsToDelete.add(obj.id);
                 }
-            })
+            });
         }
+
         return prev.filter(obj => !idsToDelete.has(obj.id));
     });
   };
