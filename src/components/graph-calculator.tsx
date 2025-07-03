@@ -155,15 +155,20 @@ export function GraphCalculator() {
         step = magnitude;
     }
 
-    // Draw grid lines
-    const firstX = Math.floor(bounds.minX / step) * step;
-    for (let x = firstX; x <= bounds.maxX; x += step) {
+    const startXIndex = Math.floor(bounds.minX / step);
+    const endXIndex = Math.ceil(bounds.maxX / step);
+    const startYIndex = Math.floor(bounds.minY / step);
+    const endYIndex = Math.ceil(bounds.maxY / step);
+
+    // Draw grid lines using an index-based loop to avoid floating point errors
+    for (let i = startXIndex; i <= endXIndex; i++) {
+        const x = i * step;
         ctx.moveTo(x, bounds.minY);
         ctx.lineTo(x, bounds.maxY);
     }
 
-    const firstY = Math.floor(bounds.minY / step) * step;
-    for (let y = firstY; y <= bounds.maxY; y += step) {
+    for (let i = startYIndex; i <= endYIndex; i++) {
+        const y = i * step;
         ctx.moveTo(bounds.minX, y);
         ctx.lineTo(bounds.maxX, y);
     }
@@ -176,26 +181,29 @@ export function GraphCalculator() {
     ctx.scale(1, -1); // Flip text to be upright
     
     const labelPadding = 5 / zoom;
-    const decimalPlaces = Math.max(0, Math.ceil(-Math.log10(step)));
+    // Clamp decimal places to avoid floating point issues and toFixed limitations.
+    const decimalPlaces = Math.min(15, Math.max(0, Math.ceil(-Math.log10(step))));
     
     // X-axis labels
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    for (let x = firstX; x <= bounds.maxX; x += step) {
-      if (Math.abs(x) > 1e-9) { // Don't draw label at origin
-        const label = x.toFixed(decimalPlaces);
-        ctx.fillText(label, x, -labelPadding);
-      }
+    for (let i = startXIndex; i <= endXIndex; i++) {
+        const x = i * step;
+        if (Math.abs(x) > 1e-9) { // Don't draw label at origin
+            const label = x.toFixed(decimalPlaces);
+            ctx.fillText(label, x, -labelPadding);
+        }
     }
     
     // Y-axis labels
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
-    for (let y = firstY; y <= bounds.maxY; y += step) {
-      if (Math.abs(y) > 1e-9) { // Don't draw label at origin
-        const label = y.toFixed(decimalPlaces);
-        ctx.fillText(label, -labelPadding, -y);
-      }
+    for (let i = startYIndex; i <= endYIndex; i++) {
+        const y = i * step;
+        if (Math.abs(y) > 1e-9) { // Don't draw label at origin
+            const label = y.toFixed(decimalPlaces);
+            ctx.fillText(label, -labelPadding, -y);
+        }
     }
     
     // Origin label
