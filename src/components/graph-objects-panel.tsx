@@ -9,7 +9,7 @@ import { Slider as SliderComponent } from '@/components/ui/slider';
 import { Trash2, Plus } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import type { GraphObject, Func, Slider, Point, Segment } from '@/lib/graph-types';
+import type { GraphObject, Func, Slider, Point, Segment, Polygon } from '@/lib/graph-types';
 
 export function GraphObjectsPanel({ 
   objects, 
@@ -86,6 +86,21 @@ export function GraphObjectsPanel({
                   <div key={segment.id} className="flex justify-between items-center">
                      <span>Segment {p1?.label} to {p2?.label}</span>
                      <Button variant="ghost" size="icon" onClick={() => deleteObject(segment.id)} className='h-6 w-6'><Trash2 className="h-4 w-4" /></Button>
+                  </div>
+              );
+          })}
+           </div>
+        </div>
+        <Separator />
+        <div>
+          <Label className="text-lg font-semibold">Polygons</Label>
+           <div className='space-y-1 mt-2 text-sm'>
+           {objects.filter(o => o.type === 'polygon').map(obj => {
+              const polygon = obj as Polygon;
+              return (
+                  <div key={polygon.id} className="flex justify-between items-center">
+                     <span>Polygon ({polygon.pointIds.length} vertices)</span>
+                     <Button variant="ghost" size="icon" onClick={() => deleteObject(polygon.id)} className='h-6 w-6'><Trash2 className="h-4 w-4" /></Button>
                   </div>
               );
           })}

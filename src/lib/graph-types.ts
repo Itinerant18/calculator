@@ -45,5 +45,12 @@ export type Measurement = {
     y: number;
 };
 
+export type Polygon = {
+    id: string;
+    type: 'polygon';
+    pointIds: string[];
+    color: string;
+}
 
-export type GraphObject = Point | Func | Slider | Segment | Measurement;
+
+export type GraphObject = Point | Func | Slider | Segment | Measurement | Polygon;

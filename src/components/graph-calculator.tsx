@@ -9,7 +9,7 @@ import { addToHistory } from '@/lib/history';
 import { useToast } from '@/hooks/use-toast';
 import { create, all, type MathNode } from 'mathjs';
 import { GraphToolsSidebar, type Tool } from './graph-tools-sidebar';
-import type { GraphObject, Point, Func, Segment, Measurement } from '@/lib/graph-types';
+import type { GraphObject, Point, Func, Segment, Measurement, Polygon } from '@/lib/graph-types';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -28,6 +28,7 @@ type ViewTransform = {
 type InteractionState = 
     | { tool: 'segment', point1Id: string }
     | { tool: 'distance', point1Id: string }
+    | { tool: 'polygon', pointIds: string[] }
     | null;
 
 export function GraphCalculator() {
@@ -39,7 +40,7 @@ export function GraphCalculator() {
   const [isDragging, setIsDragging] = useState(false);
   const [selectedObjectIds, setSelectedObjectIds] = useState<string[]>([]);
   const [interactionState, setInteractionState] = useState<InteractionState>(null);
-  const lastMousePos = useRef({ x: 0, y: 0 });
+  const lastMousePos = useRef({ x: 0, y: 0, world: {x: 0, y: 0} });
   const isMobile = useIsMobile();
 
   const { toast } = useToast();
@@ -96,8 +97,13 @@ export function GraphCalculator() {
         if (obj.type === 'function') drawFunction(ctx, obj as Func, viewBounds, scope);
         if (obj.type === 'point') drawPoint(ctx, obj as Point);
         if (obj.type === 'segment') drawSegment(ctx, obj as Segment, objects);
+        if (obj.type === 'polygon') drawPolygon(ctx, obj as Polygon, objects);
         if (obj.type === 'measurement') drawMeasurement(ctx, obj as Measurement, viewTransform.zoom);
       });
+
+      if (interactionState?.tool === 'polygon' && interactionState.pointIds.length > 0) {
+        drawInprogressPolygon(ctx, interactionState.pointIds, lastMousePos.current.world, objects);
+      }
 
       ctx.restore();
       animationFrameId = window.requestAnimationFrame(render);
@@ -108,7 +114,7 @@ export function GraphCalculator() {
     return () => {
       window.cancelAnimationFrame(animationFrameId);
     };
-  }, [objects, viewTransform, selectedObjectIds]);
+  }, [objects, viewTransform, selectedObjectIds, interactionState]);
 
   const screenToWorld = (x: number, y: number): {x: number, y: number} => {
     const canvas = canvasRef.current;
@@ -207,6 +213,54 @@ export function GraphCalculator() {
       ctx.stroke();
   };
   
+  const drawPolygon = (ctx: CanvasRenderingContext2D, polygon: Polygon, allObjects: GraphObject[]) => {
+    if (polygon.pointIds.length < 2) return;
+    const points = polygon.pointIds.map(id => allObjects.find(o => o.id === id) as Point).filter(Boolean);
+    if (points.length !== polygon.pointIds.length || points.length < 2) return;
+
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i++) {
+        ctx.lineTo(points[i].x, points[i].y);
+    }
+    ctx.closePath();
+    
+    // 80 is hex for 50% opacity
+    ctx.fillStyle = `${polygon.color}80`;
+    ctx.fill();
+    ctx.strokeStyle = polygon.color;
+    ctx.lineWidth = 2 / viewTransform.zoom;
+    ctx.stroke();
+  };
+
+  const drawInprogressPolygon = (ctx: CanvasRenderingContext2D, pointIds: string[], currentMousePos: {x:number, y:number}, allObjects: GraphObject[]) => {
+    const points = pointIds.map(id => allObjects.find(o => o.id === id) as Point).filter(Boolean);
+    if (points.length === 0) return;
+
+    ctx.strokeStyle = 'hsl(var(--primary))';
+    ctx.lineWidth = 2 / viewTransform.zoom;
+
+    // Draw solid lines between existing points
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i++) {
+        ctx.lineTo(points[i].x, points[i].y);
+    }
+    ctx.lineTo(currentMousePos.x, currentMousePos.y);
+    ctx.stroke();
+    
+    // If more than 1 point, draw dashed line from mouse back to start
+    if (points.length > 1) {
+        ctx.beginPath();
+        ctx.setLineDash([5 / viewTransform.zoom, 5 / viewTransform.zoom]);
+        ctx.moveTo(currentMousePos.x, currentMousePos.y);
+        ctx.lineTo(points[0].x, points[0].y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
+  };
+
+
   const drawMeasurement = (ctx: CanvasRenderingContext2D, measurement: Measurement, zoom: number) => {
     ctx.save();
     ctx.font = `${12 / zoom}px Arial`;
@@ -339,15 +393,22 @@ export function GraphCalculator() {
   
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     setIsDragging(true);
-    lastMousePos.current = { x: e.clientX, y: e.clientY };
+    const rect = canvasRef.current!.getBoundingClientRect();
+    const worldPos = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+    lastMousePos.current = { x: e.clientX, y: e.clientY, world: worldPos };
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDragging || activeTool !== 'move') return;
-    const dx = e.clientX - lastMousePos.current.x;
-    const dy = e.clientY - lastMousePos.current.y;
-    lastMousePos.current = { x: e.clientX, y: e.clientY };
-    setViewTransform(v => ({ ...v, x: v.x + dx, y: v.y + dy }));
+    const rect = canvasRef.current!.getBoundingClientRect();
+    const worldPos = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+
+    if (isDragging && activeTool === 'move') {
+      const dx = e.clientX - lastMousePos.current.x;
+      const dy = e.clientY - lastMousePos.current.y;
+      setViewTransform(v => ({ ...v, x: v.x + dx, y: v.y + dy }));
+    }
+
+    lastMousePos.current = { x: e.clientX, y: e.clientY, world: worldPos };
   };
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -379,6 +440,39 @@ export function GraphCalculator() {
             }
         }
         break;
+      
+      case 'polygon': {
+          const clickedOnExistingPoint = findClosestPoint(worldPos);
+          
+          if (!interactionState || interactionState.tool !== 'polygon') {
+              // Start a new polygon
+              const pointId = clickedOnExistingPoint?.id ?? addPoint(worldPos.x, worldPos.y, true);
+              setInteractionState({ tool: 'polygon', pointIds: [pointId] });
+              toast({ description: 'First point selected. Click to add more vertices or click the first point to finish.' });
+          } else {
+              // Continue polygon
+              const firstPointId = interactionState.pointIds[0];
+              
+              // Check if user clicked the first point to close the polygon
+              if (clickedOnExistingPoint && clickedOnExistingPoint.id === firstPointId && interactionState.pointIds.length > 2) {
+                  addPolygon(interactionState.pointIds);
+                  setInteractionState(null);
+                  toast({ title: 'Polygon created.' });
+              } else {
+                  // Add a new point to the polygon
+                  const newPointId = clickedOnExistingPoint?.id ?? addPoint(worldPos.x, worldPos.y, true);
+                  // Avoid adding the same point twice in a row
+                  if (newPointId === interactionState.pointIds[interactionState.pointIds.length - 1]) return;
+                  
+                  setInteractionState({
+                      tool: 'polygon',
+                      pointIds: [...interactionState.pointIds, newPointId]
+                  });
+                  toast({ description: 'Vertex added.' });
+              }
+          }
+          break;
+      }
 
       case 'distance':
         {
@@ -510,6 +604,16 @@ export function GraphCalculator() {
     setObjects(prev => [...prev, newSegment]);
   };
 
+  const addPolygon = (pointIds: string[]) => {
+    const newPolygon: Polygon = {
+        id: crypto.randomUUID(),
+        type: 'polygon',
+        pointIds,
+        color: 'hsl(var(--primary))'
+    };
+    setObjects(prev => [...prev, newPolygon]);
+  };
+
   const measureDistance = (point1Id: string, point2Id: string) => {
       const p1 = objects.find(o => o.id === point1Id) as Point;
       const p2 = objects.find(o => o.id === point2Id) as Point;
@@ -553,10 +657,13 @@ export function GraphCalculator() {
         const objectToDelete = prev.find(o => o.id === id);
         let idsToDelete = new Set([id]);
 
-        // If a point is deleted, also delete segments connected to it
+        // If a point is deleted, also delete segments and polygons connected to it
         if (objectToDelete?.type === 'point') {
             prev.forEach(obj => {
                 if (obj.type === 'segment' && (obj.point1Id === id || obj.point2Id === id)) {
+                    idsToDelete.add(obj.id);
+                }
+                if (obj.type === 'polygon' && obj.pointIds.includes(id)) {
                     idsToDelete.add(obj.id);
                 }
             });
