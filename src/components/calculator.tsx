@@ -22,7 +22,7 @@ math.config({
 const NeumorphicButton = ({ children, onClick, className = '', ...props }: { children: React.ReactNode, onClick: (value?: any) => void, className?: string, props?: any }) => (
   <Button
     variant="ghost"
-    className={`h-16 w-full rounded-full text-xl font-bold text-foreground/80 shadow-neumorphic-light dark:shadow-neumorphic-dark active:shadow-neumorphic-light-inset active:dark:shadow-neumorphic-dark-inset transition-all duration-150 ease-in-out hover:text-primary flex items-center justify-center ${className}`}
+    className={`h-16 w-full rounded-full text-xl font-bold text-foreground/80 shadow-neumorphic-light dark:shadow-neumorphic-dark active:shadow-neumorphic-light-inset active:dark:shadow-neumorphic-dark-inset transition-all duration-150 ease-in-out hover:text-primary hover:bg-muted flex items-center justify-center ${className}`}
     onClick={onClick}
     {...props}
   >
@@ -33,7 +33,7 @@ const NeumorphicButton = ({ children, onClick, className = '', ...props }: { chi
 const ScientificButton = ({ children, onClick, className = '' }: { children: React.ReactNode, onClick: () => void, className?: string }) => (
     <Button
       variant="ghost"
-      className={`h-12 w-full rounded-lg text-base font-semibold text-foreground/70 shadow-neumorphic-light dark:shadow-neumorphic-dark active:shadow-neumorphic-light-inset active:dark:shadow-neumorphic-dark-inset transition-all duration-150 ease-in-out hover:text-primary ${className}`}
+      className={`h-12 w-full rounded-lg text-base font-semibold text-foreground/70 shadow-neumorphic-light dark:shadow-neumorphic-dark active:shadow-neumorphic-light-inset active:dark:shadow-neumorphic-dark-inset transition-all duration-150 ease-in-out hover:text-primary hover:bg-muted ${className}`}
       onClick={onClick}
     >
       {children}
