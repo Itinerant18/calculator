@@ -13,6 +13,7 @@ import {z} from 'genkit';
 
 const AnswerMathQuestionInputSchema = z.object({
   question: z.string().describe('The mathematical or scientific question to be answered.'),
+  angleMode: z.enum(['deg', 'rad']).optional().describe('The angle mode for trigonometric calculations.'),
 });
 export type AnswerMathQuestionInput = z.infer<typeof AnswerMathQuestionInputSchema>;
 
@@ -29,7 +30,13 @@ const answerMathQuestionPrompt = ai.definePrompt({
   name: 'answerMathQuestionPrompt',
   input: {schema: AnswerMathQuestionInputSchema},
   output: {schema: AnswerMathQuestionOutputSchema},
-  prompt: `You are an expert in mathematics and science. Answer the following question accurately and display any equations using LaTeX formatting.\n\nQuestion: {{{question}}}`,
+  prompt: `You are the computational engine for a powerful scientific calculator. Evaluate the following mathematical expression or answer the question. 
+  
+  Return ONLY the final numerical result or a simplified expression. Do not provide explanations, units, or any extra text unless the user's input is explicitly a question.
+  
+  The current angle mode for trigonometric functions is '{{{angleMode}}}'.
+
+  Expression: {{{question}}}`,
 });
 
 const answerMathQuestionFlow = ai.defineFlow(
@@ -39,7 +46,10 @@ const answerMathQuestionFlow = ai.defineFlow(
     outputSchema: AnswerMathQuestionOutputSchema,
   },
   async input => {
+    // For very simple results, the AI might return just a number. Convert it to a string.
     const {output} = await answerMathQuestionPrompt(input);
-    return output!;
+    const result = output!;
+    result.answer = String(result.answer).trim();
+    return result;
   }
 );
