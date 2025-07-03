@@ -1,3 +1,4 @@
+
 "use client";
 
 import {
@@ -24,7 +25,13 @@ const menuItems = [
 
 export function MainSidebar() {
   const pathname = usePathname();
-  const { state } = useSidebar();
+  const { state, isMobile, setOpenMobile } = useSidebar();
+
+  const handleLinkClick = () => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  };
 
   return (
     <Sidebar>
@@ -45,6 +52,7 @@ export function MainSidebar() {
                 size="lg"
                 isActive={pathname.startsWith(item.href)}
                 tooltip={{ children: item.label, side: "right", align: "center" }}
+                onClick={handleLinkClick}
               >
                 <Link href={item.href}>
                   <item.icon className="h-5 w-5" />
