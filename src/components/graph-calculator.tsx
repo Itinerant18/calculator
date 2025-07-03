@@ -136,16 +136,73 @@ export function GraphCalculator() {
     ctx.beginPath();
     ctx.strokeStyle = 'hsl(var(--border))';
     ctx.lineWidth = 1 / zoom;
-    const step = Math.pow(10, Math.floor(Math.log10(bounds.maxX - bounds.minX)) - 1);
-    for (let x = Math.floor(bounds.minX / step) * step; x <= bounds.maxX; x += step) {
+
+    // Determine grid step based on zoom level to avoid clutter
+    const pixelsPerUnit = zoom;
+    const minGridSpacingPixels = 60; // Aim for at least 60px between grid lines
+    const minUnitsPerLine = minGridSpacingPixels / pixelsPerUnit;
+
+    const magnitude = Math.pow(10, Math.floor(Math.log10(minUnitsPerLine)));
+    const residual = minUnitsPerLine / magnitude;
+    let step;
+    if (residual > 5) {
+        step = 10 * magnitude;
+    } else if (residual > 2) {
+        step = 5 * magnitude;
+    } else if (residual > 1) {
+        step = 2 * magnitude;
+    } else {
+        step = magnitude;
+    }
+
+    // Draw grid lines
+    const firstX = Math.floor(bounds.minX / step) * step;
+    for (let x = firstX; x <= bounds.maxX; x += step) {
         ctx.moveTo(x, bounds.minY);
         ctx.lineTo(x, bounds.maxY);
     }
-    for (let y = Math.floor(bounds.minY / step) * step; y <= bounds.maxY; y += step) {
+
+    const firstY = Math.floor(bounds.minY / step) * step;
+    for (let y = firstY; y <= bounds.maxY; y += step) {
         ctx.moveTo(bounds.minX, y);
         ctx.lineTo(bounds.maxX, y);
     }
     ctx.stroke();
+
+    // Draw labels
+    ctx.save();
+    ctx.fillStyle = 'hsl(var(--muted-foreground))';
+    ctx.font = `${12 / zoom}px sans-serif`;
+    ctx.scale(1, -1); // Flip text to be upright
+    
+    const labelPadding = 5 / zoom;
+    const decimalPlaces = Math.max(0, Math.ceil(-Math.log10(step)));
+    
+    // X-axis labels
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    for (let x = firstX; x <= bounds.maxX; x += step) {
+      if (Math.abs(x) > 1e-9) { // Don't draw label at origin
+        const label = x.toFixed(decimalPlaces);
+        ctx.fillText(label, x, -labelPadding);
+      }
+    }
+    
+    // Y-axis labels
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    for (let y = firstY; y <= bounds.maxY; y += step) {
+      if (Math.abs(y) > 1e-9) { // Don't draw label at origin
+        const label = y.toFixed(decimalPlaces);
+        ctx.fillText(label, -labelPadding, -y);
+      }
+    }
+    
+    // Origin label
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillText('0', labelPadding, -labelPadding);
+    ctx.restore();
   };
 
   const drawAxes = (ctx: CanvasRenderingContext2D, bounds: any) => {
