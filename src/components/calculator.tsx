@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useCallback } from "react";
@@ -18,10 +19,10 @@ math.config({
   precision: 64,
 });
 
-const NeumorphicButton = ({ children, onClick, className = '', ...props }: { children: React.ReactNode, onClick: () => void, className?: string, props?: any }) => (
+const NeumorphicButton = ({ children, onClick, className = '', ...props }: { children: React.ReactNode, onClick: (value?: any) => void, className?: string, props?: any }) => (
   <Button
     variant="ghost"
-    className={`h-16 w-16 rounded-full text-xl font-bold text-foreground/80 shadow-neumorphic-light dark:shadow-neumorphic-dark active:shadow-neumorphic-light-inset active:dark:shadow-neumorphic-dark-inset transition-all duration-150 ease-in-out hover:text-primary ${className}`}
+    className={`h-16 w-full rounded-full text-xl font-bold text-foreground/80 shadow-neumorphic-light dark:shadow-neumorphic-dark active:shadow-neumorphic-light-inset active:dark:shadow-neumorphic-dark-inset transition-all duration-150 ease-in-out hover:text-primary flex items-center justify-center ${className}`}
     onClick={onClick}
     {...props}
   >
@@ -71,9 +72,9 @@ export function Calculator() {
   const handleOperator = useCallback((operator: string) => {
     setDisplay(prev => {
       if (prev === "Error") return "0";
-      const lastChar = prev.slice(-1);
-      if (['+', '-', '*', '/'].includes(lastChar)) {
-        return prev.slice(0, -1) + operator;
+      const lastChar = prev.trim().slice(-1);
+      if (['+', '−', '×', '÷'].includes(lastChar)) {
+        return prev.trim().slice(0, -1) + ` ${operator} `;
       }
       return prev + ` ${operator} `;
     });
@@ -92,12 +93,16 @@ export function Calculator() {
   }, []);
 
   const handleBackspace = useCallback(() => {
-    setDisplay(prev => prev.length > 1 ? prev.slice(0, -1).trim() : "0");
+    setDisplay(prev => {
+      if (prev === "Error" || (prev.length === 1 && prev !== '0')) return "0";
+      if (prev === "0") return "0";
+      return prev.slice(0, -1) || "0";
+    });
   }, []);
 
   const handleEquals = useCallback(async () => {
     if (isLoading) return;
-    const expression = display.trim();
+    const expression = display.trim().replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-');
     if (!expression || expression === "Error") return;
 
     const useAI = advancedKeywords.some(keyword => expression.toLowerCase().includes(keyword));
@@ -131,20 +136,25 @@ export function Calculator() {
   };
 
   const basicButtons = [
+    { label: "C", handler: handleClear, className: "text-destructive" },
+    { label: "(", handler: () => handleInput('(') },
+    { label: ")", handler: () => handleInput(')') },
+    { label: <Eraser className="h-5 w-5" />, handler: handleBackspace },
     { label: "7", handler: () => handleInput("7") },
     { label: "8", handler: () => handleInput("8") },
     { label: "9", handler: () => handleInput("9") },
-    { label: "*", handler: () => handleOperator("*") },
+    { label: "÷", handler: () => handleOperator("/") },
     { label: "4", handler: () => handleInput("4") },
     { label: "5", handler: () => handleInput("5") },
     { label: "6", handler: () => handleInput("6") },
-    { label: "-", handler: () => handleOperator("-") },
+    { label: "×", handler: () => handleOperator("*") },
     { label: "1", handler: () => handleInput("1") },
     { label: "2", handler: () => handleInput("2") },
     { label: "3", handler: () => handleInput("3") },
-    { label: "+", handler: () => handleOperator("+") },
-    { label: "0", handler: () => handleInput("0"), className: "col-span-2 w-full" },
+    { label: "−", handler: () => handleOperator("-") },
+    { label: "0", handler: () => handleInput("0") },
     { label: ".", handler: () => handleInput(".") },
+    { label: "+", handler: () => handleOperator("+") },
     { label: "=", handler: handleEquals, className: "bg-primary text-primary-foreground hover:bg-primary/90" },
   ];
 
@@ -215,8 +225,8 @@ export function Calculator() {
 
       <div className="bg-background dark:bg-card shadow-neumorphic-light-inset dark:shadow-neumorphic-dark-inset rounded-xl p-4 text-right overflow-x-auto min-h-[72px] flex items-center justify-end">
         {isLoading ? 
-            <Skeleton className="h-8 w-3/4" /> :
-            <p className="text-4xl font-mono break-all">{display}</p>
+            <Skeleton className="h-10 w-3/4" /> :
+            <p className="text-5xl font-mono break-all">{display}</p>
         }
       </div>
       
@@ -250,11 +260,6 @@ export function Calculator() {
       </Tabs>
 
       <div className="grid grid-cols-4 gap-2">
-        <NeumorphicButton onClick={handleClear} className="text-destructive">C</NeumorphicButton>
-        <NeumorphicButton onClick={() => handleInput('(')}>(</NeumorphicButton>
-        <NeumorphicButton onClick={() => handleInput(')')}>)</NeumorphicButton>
-        <NeumorphicButton onClick={() => handleOperator('/')}>/</NeumorphicButton>
-        
         {basicButtons.map((btn, i) => <NeumorphicButton key={`b-${i}`} onClick={btn.handler} className={btn.className}>{btn.label}</NeumorphicButton>)}
       </div>
     </div>
