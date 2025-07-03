@@ -1,5 +1,6 @@
 import { MainSidebar } from "@/components/main-sidebar";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
+import { MobileHeader } from "@/components/mobile-header";
 
 export default function MainLayout({
   children,
@@ -10,7 +11,8 @@ export default function MainLayout({
     <SidebarProvider>
       <MainSidebar />
       <SidebarInset>
-        <div className="h-screen w-full overflow-y-auto">
+        <MobileHeader />
+        <div className="h-screen w-full overflow-y-auto pt-16 md:pt-0">
           {children}
         </div>
       </SidebarInset>
