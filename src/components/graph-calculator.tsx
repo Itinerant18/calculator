@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Save } from 'lucide-react';
 import { addToHistory } from '@/lib/history';
 import { useToast } from '@/hooks/use-toast';
-import { create, all } from 'mathjs';
+import { create, all, type MathNode } from 'mathjs';
 import { GraphToolsSidebar, type Tool } from './graph-tools-sidebar';
 import type { GraphObject, Point, Func } from '@/lib/graph-types';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -32,10 +32,21 @@ export function GraphCalculator() {
   const [activeTool, setActiveTool] = useState<Tool>('move');
   const [viewTransform, setViewTransform] = useState<ViewTransform>({ x: 0, y: 0, zoom: 50 });
   const [isDragging, setIsDragging] = useState(false);
+  const [selectedObjectIds, setSelectedObjectIds] = useState<string[]>([]);
   const lastMousePos = useRef({ x: 0, y: 0 });
   const isMobile = useIsMobile();
 
   const { toast } = useToast();
+
+  const clearSelection = useCallback(() => {
+    setSelectedObjectIds([]);
+  }, []);
+
+  // When tool changes, clear any pending selections
+  useEffect(() => {
+    clearSelection();
+  }, [activeTool, clearSelection]);
+
 
   // #region Core Drawing & Transformation Logic
   useEffect(() => {
@@ -88,9 +99,9 @@ export function GraphCalculator() {
     return () => {
       window.cancelAnimationFrame(animationFrameId);
     };
-  }, [objects, viewTransform]);
+  }, [objects, viewTransform, selectedObjectIds]);
 
-  const screenToWorld = (x: number, y: number) => {
+  const screenToWorld = (x: number, y: number): {x: number, y: number} => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const { width, height } = canvas;
@@ -132,7 +143,16 @@ export function GraphCalculator() {
   const drawFunction = (ctx: CanvasRenderingContext2D, func: Func, bounds: any, scope: any) => {
     ctx.beginPath();
     ctx.strokeStyle = func.color;
-    ctx.lineWidth = 2 / viewTransform.zoom;
+    
+    if (selectedObjectIds.includes(func.id)) {
+        ctx.lineWidth = 4 / viewTransform.zoom;
+        ctx.shadowColor = func.color;
+        ctx.shadowBlur = 15 / viewTransform.zoom;
+    } else {
+        ctx.lineWidth = 2 / viewTransform.zoom;
+        ctx.shadowBlur = 0;
+    }
+    
     let firstPoint = true;
     for (let sx = 0; sx <= ctx.canvas.width; sx++) {
         const x = screenToWorld(sx, 0).x;
@@ -149,6 +169,8 @@ export function GraphCalculator() {
         } catch (e) { /* ignore */ }
     }
     ctx.stroke();
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
   };
 
   const drawPoint = (ctx: CanvasRenderingContext2D, point: Point) => {
@@ -165,12 +187,56 @@ export function GraphCalculator() {
   // #endregion
 
   // #region Tool Logic & Event Handlers
-  const findRoots = useCallback((func: Func, bounds: any, scope: any) => {
-    const { minX, maxX } = bounds;
-    const roots: { x: number; y: number }[] = [];
-    const compiledFunc = (x: number) => func.compiled.evaluate({ ...scope, x });
+  const findClosestFunction = useCallback((pos: {x:number, y:number}) => {
+    let closestFunc: Func | null = null;
+    let minDistance = Infinity;
+    const scope = objects.filter(o => o.type === 'slider').reduce((acc, s) => ({ ...acc, [(s as any).name]: (s as any).value }), {});
+    objects.forEach(obj => {
+      if (obj.type === 'function') {
+        try {
+          const y = (obj as Func).compiled.evaluate({ ...scope, x: pos.x });
+          const distance = Math.abs(y - pos.y);
+          if (distance < minDistance) {
+            minDistance = distance;
+            closestFunc = obj as Func;
+          }
+        } catch (e) {}
+      }
+    });
+    // Check if click is close enough to the function line
+    if (closestFunc && minDistance < 1 / viewTransform.zoom * 20) {
+        return closestFunc;
+    }
+    return null;
+  }, [objects, viewTransform.zoom]);
 
-    const bisection = (f: (x: number) => number, a: number, b: number, tol = 1e-7, maxIter = 100) => {
+  const findClosestObject = useCallback((pos: {x:number, y:number}) => {
+    let closestObj: GraphObject | null = null;
+    let minDistance = Infinity;
+    const clickTolerance = 1 / viewTransform.zoom * 20;
+
+    objects.forEach(obj => {
+        let distance = Infinity;
+        if (obj.type === 'point') {
+            distance = Math.sqrt(Math.pow(obj.x - pos.x, 2) + Math.pow(obj.y - pos.y, 2));
+        } else if (obj.type === 'function') {
+             try {
+                const scope = objects.filter(o => o.type === 'slider').reduce((acc, s) => ({ ...acc, [(s as any).name]: (s as any).value }), {});
+                const y = obj.compiled.evaluate({ ...scope, x: pos.x });
+                distance = Math.abs(y - pos.y);
+            } catch (e) {}
+        }
+
+        if (distance < minDistance) {
+            minDistance = distance;
+            closestObj = obj;
+        }
+    });
+
+    return minDistance < clickTolerance ? closestObj : null;
+  }, [objects, viewTransform.zoom]);
+
+  const bisection = (f: (x: number) => number, a: number, b: number, tol = 1e-7, maxIter = 100) => {
       let fa = f(a);
       if (Math.abs(fa) < tol) return a;
       let fb = f(b);
@@ -184,29 +250,41 @@ export function GraphCalculator() {
         if (fa * fc < 0) { b = c; } else { a = c; fa = fc; }
       }
       return c;
-    };
+  };
 
-    const step = (maxX - minX) / 500;
+  const findPoints = useCallback((
+      compiledFunc: ReturnType<MathNode['compile']>, 
+      bounds: {minX: number, maxX: number}, 
+      labelPrefix: string,
+      yCalculator?: (x:number) => number
+  ) => {
+    const { minX, maxX } = bounds;
+    const points: { x: number; y: number }[] = [];
+    const step = (maxX - minX) / 1000;
+    
     for (let x = minX; x < maxX; x += step) {
       try {
-        const y1 = compiledFunc(x);
-        const y2 = compiledFunc(x + step);
+        const y1 = compiledFunc.evaluate({x});
+        const y2 = compiledFunc.evaluate({x: x + step});
         if (y1 * y2 < 0) {
-          const rootX = bisection(compiledFunc, x, x + step);
-          if (rootX !== null) roots.push({ x: rootX, y: 0 });
+          const rootX = bisection((xVal) => compiledFunc.evaluate({x: xVal}), x, x + step);
+          if (rootX !== null) {
+              const yVal = yCalculator ? yCalculator(rootX) : 0;
+              points.push({ x: rootX, y: yVal });
+          }
         }
       } catch (e) { /* ignore */ }
     }
     
-    if(roots.length > 0) {
-      const newPoints: Point[] = roots.map(r => ({
-          id: crypto.randomUUID(), type: 'point', x: r.x, y: r.y,
-          label: `Root (${r.x.toFixed(2)})`, isDerived: true,
+    if(points.length > 0) {
+      const newPoints: Point[] = points.map(p => ({
+          id: crypto.randomUUID(), type: 'point', x: p.x, y: p.y,
+          label: `${labelPrefix} (${p.x.toFixed(2)}, ${p.y.toFixed(2)})`, isDerived: true,
       }));
-      setObjects(prev => [...prev.filter(o => !(o.type === 'point' && (o as Point).isDerived)), ...newPoints]);
-      toast({ title: `Found ${newPoints.length} root(s).` });
+      setObjects(prev => [...prev.filter(o => !(o.type === 'point' && o.label.startsWith(labelPrefix))), ...newPoints]);
+      toast({ title: `Found ${newPoints.length} ${labelPrefix.toLowerCase()}(s).` });
     } else {
-      toast({ variant: 'destructive', title: 'No roots found in the current view.' });
+      toast({ variant: 'destructive', title: `No ${labelPrefix.toLowerCase()} found in the current view.` });
     }
   }, [toast]);
   
@@ -223,47 +301,85 @@ export function GraphCalculator() {
     setViewTransform(v => ({ ...v, x: v.x + dx, y: v.y + dy }));
   };
 
-  const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const wasDragging = (Math.abs(e.clientX - lastMousePos.current.x) > 2 || Math.abs(e.clientY - lastMousePos.current.y) > 2);
-    setIsDragging(false);
-    if (wasDragging && activeTool === 'move') return;
-
+  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = canvasRef.current!.getBoundingClientRect();
     const worldPos = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+    const scope = objects.filter(o => o.type === 'slider').reduce((acc, s) => ({ ...acc, [(s as any).name]: (s as any).value }), {});
+    const viewBounds = {
+        minX: screenToWorld(0, 0).x,
+        maxX: screenToWorld(canvasRef.current!.width, 0).x,
+    };
 
     switch (activeTool) {
       case 'point':
         addPoint(worldPos.x, worldPos.y);
         break;
+      
       case 'roots': {
-        let closestFunc: Func | null = null;
-        let minDistance = Infinity;
-        const scope = objects.filter(o => o.type === 'slider').reduce((acc, s) => ({ ...acc, [(s as any).name]: (s as any).value }), {});
-        objects.forEach(obj => {
-          if (obj.type === 'function') {
-            try {
-              const y = (obj as Func).compiled.evaluate({ ...scope, x: worldPos.x });
-              const distance = Math.abs(y - worldPos.y);
-              if (distance < minDistance) {
-                minDistance = distance;
-                closestFunc = obj as Func;
-              }
-            } catch (e) {}
-          }
-        });
-
-        if (closestFunc && minDistance < 1 / viewTransform.zoom * 20) { // Click tolerance
-          const viewBounds = {
-            minX: screenToWorld(0, 0).x,
-            maxX: screenToWorld(canvasRef.current!.width, 0).x,
-          };
-          findRoots(closestFunc, viewBounds, scope);
+        const func = findClosestFunction(worldPos);
+        if (func) {
+            findPoints(func.compiled, viewBounds, 'Root');
         } else {
-          toast({ variant: 'destructive', title: 'No function selected', description: 'Click closer to a function to find its roots.' });
+            toast({ variant: 'destructive', title: 'No function selected', description: 'Click closer to a function to find its roots.' });
+        }
+        break;
+      }
+
+      case 'intersect': {
+        const func = findClosestFunction(worldPos);
+        if (!func) { return; }
+
+        if (selectedObjectIds.length === 0) {
+            setSelectedObjectIds([func.id]);
+            toast({ description: `Function y=${func.expression} selected. Select another to find intersections.` });
+        } else if (selectedObjectIds.length === 1 && selectedObjectIds[0] !== func.id) {
+            const func1 = objects.find(o => o.id === selectedObjectIds[0]) as Func;
+            const func2 = func;
+            
+            try {
+                const diffExpression = `(${func1.expression}) - (${func2.expression})`;
+                const compiledDiff = math.parse(diffExpression).compile();
+                findPoints(compiledDiff, viewBounds, 'Intersect', (x) => func1.compiled.evaluate({x}));
+            } catch(e) {
+                toast({ variant: 'destructive', title: 'Could not find intersections.' });
+            }
+            clearSelection();
+        }
+        break;
+      }
+      
+      case 'extremum': {
+        const func = findClosestFunction(worldPos);
+        if (func) {
+            try {
+                const derivative = math.derivative(func.expression, 'x').compile();
+                findPoints(derivative, viewBounds, 'Extremum', (x) => func.compiled.evaluate({x}));
+            } catch(e) {
+                toast({ variant: 'destructive', title: 'Could not compute derivative.' });
+            }
+        } else {
+            toast({ variant: 'destructive', title: 'No function selected.' });
+        }
+        break;
+      }
+
+      case 'delete': {
+        const objToDelete = findClosestObject(worldPos);
+        if (objToDelete) {
+            deleteObject(objToDelete.id);
+            toast({ description: 'Object deleted.' });
         }
         break;
       }
     }
+  };
+
+  const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const wasDragging = (Math.abs(e.clientX - lastMousePos.current.x) > 2 || Math.abs(e.clientY - lastMousePos.current.y) > 2);
+    setIsDragging(false);
+    if (activeTool === 'move' && wasDragging) return;
+    
+    handleCanvasClick(e);
   };
 
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
@@ -317,7 +433,13 @@ export function GraphCalculator() {
   };
 
   const deleteObject = (id: string) => {
-    setObjects(prev => prev.filter(obj => obj.id !== id));
+    // Also remove derived points that depend on a function being deleted
+    const objectToDelete = objects.find(o => o.id === id);
+    if (objectToDelete && objectToDelete.type === 'function') {
+        setObjects(prev => prev.filter(obj => obj.id !== id && !(obj.type === 'point' && (obj as Point).isDerived)));
+    } else {
+        setObjects(prev => prev.filter(obj => obj.id !== id));
+    }
   };
   
   const handleSave = () => {
