@@ -1,3 +1,4 @@
+
 import type { MathNode } from 'mathjs';
 
 // The `isDerived` property is used to distinguish points created by the user
@@ -52,5 +53,14 @@ export type Polygon = {
     color: string;
 }
 
+export type Angle = {
+    id: string;
+    type: 'angle';
+    vertexPointId: string;
+    arm1PointId: string;
+    arm2PointId: string;
+    color: string;
+};
 
-export type GraphObject = Point | Func | Slider | Segment | Measurement | Polygon;
+
+export type GraphObject = Point | Func | Slider | Segment | Measurement | Polygon | Angle;

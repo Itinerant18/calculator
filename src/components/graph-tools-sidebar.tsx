@@ -11,8 +11,28 @@ import {
 import { Button } from '@/components/ui/button';
 import {
   Move, MousePointer, SlidersHorizontal, Crosshair, TrendingUp, Anchor, Sigma,
-  Minus, Spline, Ruler, CaseUpper, Trash2, Edit
+  Minus, Spline, Ruler, Trash2, Edit
 } from 'lucide-react';
+
+// A simple SVG for the angle icon, as lucide-react doesn't have a direct equivalent.
+const AngleIcon = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className="h-6 w-6 mb-1"
+  >
+    <path d="M21 21H3L12 3" />
+    <path d="M10 15.5a5.5 5.5 0 0 0 5.5-5.5" />
+  </svg>
+);
+
 
 export type Tool = 
   | 'move' | 'point' | 'slider'
@@ -37,7 +57,7 @@ const toolConfig = {
     { id: 'segment', label: 'Segment', icon: Minus },
     { id: 'polygon', label: 'Polygon', icon: Spline },
     { id: 'distance', label: 'Distance', icon: Ruler },
-    { id: 'angle', label: 'Angle', icon: CaseUpper },
+    { id: 'angle', label: 'Angle', icon: AngleIcon },
   ],
   edit: [
     { id: 'select', label: 'Select', icon: Edit },

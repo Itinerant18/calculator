@@ -9,7 +9,7 @@ import { addToHistory } from '@/lib/history';
 import { useToast } from '@/hooks/use-toast';
 import { create, all, type MathNode } from 'mathjs';
 import { GraphToolsSidebar, type Tool } from './graph-tools-sidebar';
-import type { GraphObject, Point, Func, Segment, Measurement, Polygon } from '@/lib/graph-types';
+import type { GraphObject, Point, Func, Segment, Measurement, Polygon, Angle } from '@/lib/graph-types';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -29,6 +29,9 @@ type InteractionState =
     | { tool: 'segment', point1Id: string }
     | { tool: 'distance', point1Id: string }
     | { tool: 'polygon', pointIds: string[] }
+    | { tool: 'angle', step: 'vertex', pointIds: [] }
+    | { tool: 'angle', step: 'arm1', pointIds: [string] }
+    | { tool: 'angle', step: 'arm2', pointIds: [string, string] }
     | null;
 
 export function GraphCalculator() {
@@ -99,6 +102,7 @@ export function GraphCalculator() {
         if (obj.type === 'segment') drawSegment(ctx, obj as Segment, objects);
         if (obj.type === 'polygon') drawPolygon(ctx, obj as Polygon, objects);
         if (obj.type === 'measurement') drawMeasurement(ctx, obj as Measurement, viewTransform.zoom);
+        if (obj.type === 'angle') drawAngle(ctx, obj as Angle, objects, viewTransform.zoom);
       });
 
       if (interactionState?.tool === 'polygon' && interactionState.pointIds.length > 0) {
@@ -267,6 +271,47 @@ export function GraphCalculator() {
     ctx.fillStyle = 'hsl(var(--foreground))';
     ctx.scale(1, -1); // Flip text back
     ctx.fillText(measurement.label, measurement.x, -measurement.y);
+    ctx.restore();
+  };
+
+  const drawAngle = (ctx: CanvasRenderingContext2D, angle: Angle, allObjects: GraphObject[], zoom: number) => {
+    const p1 = allObjects.find(o => o.id === angle.arm1PointId) as Point;
+    const vertex = allObjects.find(o => o.id === angle.vertexPointId) as Point;
+    const p2 = allObjects.find(o => o.id === angle.arm2PointId) as Point;
+    if (!p1 || !vertex || !p2) return;
+
+    const v1 = { x: p1.x - vertex.x, y: p1.y - vertex.y };
+    const v2 = { x: p2.x - vertex.x, y: p2.y - vertex.y };
+
+    const dotProduct = v1.x * v2.x + v1.y * v2.y;
+    const mag1 = Math.sqrt(v1.x * v1.x + v1.y * v1.y);
+    const mag2 = Math.sqrt(v2.x * v2.x + v2.y * v2.y);
+    
+    if(mag1 === 0 || mag2 === 0) return;
+
+    const angleRad = Math.acos(dotProduct / (mag1 * mag2));
+    const angleDeg = angleRad * (180 / Math.PI);
+
+    const startAngle = Math.atan2(v1.y, v1.x);
+    const endAngle = Math.atan2(v2.y, v2.x);
+    const arcRadius = Math.min(mag1, mag2) * 0.3;
+
+    ctx.beginPath();
+    ctx.strokeStyle = angle.color;
+    ctx.lineWidth = 1.5 / zoom;
+    ctx.arc(vertex.x, vertex.y, arcRadius, startAngle, endAngle);
+    ctx.stroke();
+    
+    // Draw text
+    const textAngle = startAngle + (angleRad / 2) * (endAngle > startAngle ? 1 : -1);
+    const textX = vertex.x + arcRadius * 1.3 * Math.cos(textAngle);
+    const textY = vertex.y + arcRadius * 1.3 * Math.sin(textAngle);
+    
+    ctx.save();
+    ctx.fillStyle = 'hsl(var(--foreground))';
+    ctx.font = `${12 / zoom}px Arial`;
+    ctx.scale(1, -1);
+    ctx.fillText(`${angleDeg.toFixed(1)}°`, textX, -textY);
     ctx.restore();
   };
   // #endregion
@@ -490,6 +535,27 @@ export function GraphCalculator() {
             }
         }
         break;
+
+      case 'angle':
+        {
+          const pointId = clickedPoint?.id;
+          if (!pointId) {
+            toast({ variant: 'destructive', description: 'Click on a point to define the angle.' });
+            return;
+          }
+          if (!interactionState || interactionState.tool !== 'angle') {
+            setInteractionState({ tool: 'angle', step: 'vertex', pointIds: [pointId] });
+            toast({ description: 'Vertex point selected. Select first arm point.' });
+          } else if (interactionState.step === 'vertex') {
+            setInteractionState({ tool: 'angle', step: 'arm1', pointIds: [interactionState.pointIds[0], pointId] });
+            toast({ description: 'First arm point selected. Select second arm point.' });
+          } else if (interactionState.step === 'arm1') {
+            addAngle(interactionState.pointIds[1], interactionState.pointIds[0], pointId);
+            setInteractionState(null);
+            toast({ title: 'Angle created.' });
+          }
+        }
+        break;
       
       case 'roots': {
         const func = findClosestFunction(worldPos);
@@ -634,6 +700,17 @@ export function GraphCalculator() {
       toast({ title: `Distance: ${dist.toFixed(3)}` });
   };
 
+  const addAngle = (arm1PointId: string, vertexPointId: string, arm2PointId: string) => {
+    const newAngle: Angle = {
+      id: crypto.randomUUID(),
+      type: 'angle',
+      arm1PointId,
+      vertexPointId,
+      arm2PointId,
+      color: 'hsl(var(--accent))',
+    };
+    setObjects(prev => [...prev, newAngle]);
+  };
 
   const updateObject = (id: string, updates: Partial<GraphObject>) => {
     setObjects(prev => prev.map(obj => {
@@ -664,6 +741,9 @@ export function GraphCalculator() {
                     idsToDelete.add(obj.id);
                 }
                 if (obj.type === 'polygon' && obj.pointIds.includes(id)) {
+                    idsToDelete.add(obj.id);
+                }
+                if (obj.type === 'angle' && (obj.arm1PointId === id || obj.vertexPointId === id || obj.arm2PointId === id)) {
                     idsToDelete.add(obj.id);
                 }
             });
