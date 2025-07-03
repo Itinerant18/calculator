@@ -9,7 +9,7 @@ import { addToHistory } from '@/lib/history';
 import { useToast } from '@/hooks/use-toast';
 import { create, all, type MathNode } from 'mathjs';
 import { GraphToolsSidebar, type Tool } from './graph-tools-sidebar';
-import type { GraphObject, Point, Func } from '@/lib/graph-types';
+import type { GraphObject, Point, Func, Segment, Measurement } from '@/lib/graph-types';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -25,6 +25,11 @@ type ViewTransform = {
   zoom: number;
 };
 
+type InteractionState = 
+    | { tool: 'segment', point1Id: string }
+    | { tool: 'distance', point1Id: string }
+    | null;
+
 export function GraphCalculator() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -33,6 +38,7 @@ export function GraphCalculator() {
   const [viewTransform, setViewTransform] = useState<ViewTransform>({ x: 0, y: 0, zoom: 50 });
   const [isDragging, setIsDragging] = useState(false);
   const [selectedObjectIds, setSelectedObjectIds] = useState<string[]>([]);
+  const [interactionState, setInteractionState] = useState<InteractionState>(null);
   const lastMousePos = useRef({ x: 0, y: 0 });
   const isMobile = useIsMobile();
 
@@ -40,6 +46,7 @@ export function GraphCalculator() {
 
   const clearSelection = useCallback(() => {
     setSelectedObjectIds([]);
+    setInteractionState(null);
   }, []);
 
   // When tool changes, clear any pending selections
@@ -88,6 +95,8 @@ export function GraphCalculator() {
       objects.forEach(obj => {
         if (obj.type === 'function') drawFunction(ctx, obj as Func, viewBounds, scope);
         if (obj.type === 'point') drawPoint(ctx, obj as Point);
+        if (obj.type === 'segment') drawSegment(ctx, obj as Segment, objects);
+        if (obj.type === 'measurement') drawMeasurement(ctx, obj as Measurement, viewTransform.zoom);
       });
 
       ctx.restore();
@@ -184,6 +193,28 @@ export function GraphCalculator() {
     }
     ctx.fill();
   };
+
+  const drawSegment = (ctx: CanvasRenderingContext2D, segment: Segment, allObjects: GraphObject[]) => {
+      const p1 = allObjects.find(o => o.id === segment.point1Id) as Point;
+      const p2 = allObjects.find(o => o.id === segment.point2Id) as Point;
+      if (!p1 || !p2) return;
+
+      ctx.beginPath();
+      ctx.strokeStyle = segment.color;
+      ctx.lineWidth = 2 / viewTransform.zoom;
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.stroke();
+  };
+  
+  const drawMeasurement = (ctx: CanvasRenderingContext2D, measurement: Measurement, zoom: number) => {
+    ctx.save();
+    ctx.font = `${12 / zoom}px Arial`;
+    ctx.fillStyle = 'hsl(var(--foreground))';
+    ctx.scale(1, -1); // Flip text back
+    ctx.fillText(measurement.label, measurement.x, -measurement.y);
+    ctx.restore();
+  };
   // #endregion
 
   // #region Tool Logic & Event Handlers
@@ -208,6 +239,24 @@ export function GraphCalculator() {
         return closestFunc;
     }
     return null;
+  }, [objects, viewTransform.zoom]);
+
+  const findClosestPoint = useCallback((pos: {x:number, y:number}) => {
+    let closestPoint: Point | null = null;
+    let minDistance = Infinity;
+    const clickTolerance = 1 / viewTransform.zoom * 20;
+
+    objects.forEach(obj => {
+        if (obj.type === 'point') {
+            const distance = Math.sqrt(Math.pow(obj.x - pos.x, 2) + Math.pow(obj.y - pos.y, 2));
+            if (distance < minDistance) {
+                minDistance = distance;
+                closestPoint = obj;
+            }
+        }
+    });
+    
+    return minDistance < clickTolerance ? closestPoint : null;
   }, [objects, viewTransform.zoom]);
 
   const findClosestObject = useCallback((pos: {x:number, y:number}) => {
@@ -309,10 +358,43 @@ export function GraphCalculator() {
         minX: screenToWorld(0, 0).x,
         maxX: screenToWorld(canvasRef.current!.width, 0).x,
     };
+    
+    const clickedPoint = findClosestPoint(worldPos);
 
     switch (activeTool) {
       case 'point':
         addPoint(worldPos.x, worldPos.y);
+        break;
+
+      case 'segment':
+        {
+            const pointId = clickedPoint?.id ?? addPoint(worldPos.x, worldPos.y, true);
+            if (!interactionState) {
+                setInteractionState({ tool: 'segment', point1Id: pointId });
+                toast({ description: 'First point selected. Select second point.' });
+            } else if (interactionState.tool === 'segment') {
+                addSegment(interactionState.point1Id, pointId);
+                setInteractionState(null);
+                toast({ title: 'Segment created.' });
+            }
+        }
+        break;
+
+      case 'distance':
+        {
+            const pointId = clickedPoint?.id;
+            if (!pointId) {
+                toast({ variant: 'destructive', description: 'Click on a point to measure distance.' });
+                return;
+            }
+            if (!interactionState) {
+                setInteractionState({ tool: 'distance', point1Id: pointId });
+                toast({ description: 'First point selected. Select second point.' });
+            } else if (interactionState.tool === 'distance') {
+                measureDistance(interactionState.point1Id, pointId);
+                setInteractionState(null);
+            }
+        }
         break;
       
       case 'roots': {
@@ -407,13 +489,47 @@ export function GraphCalculator() {
     }
   };
 
-  const addPoint = (x: number, y: number) => {
+  const addPoint = (x: number, y: number, returnId = false): string => {
     const newPoint: Point = {
         id: crypto.randomUUID(), type: 'point', x, y,
         label: `(${x.toFixed(2)}, ${y.toFixed(2)})`
     };
     setObjects(prev => [...prev, newPoint]);
+    if (returnId) return newPoint.id;
+    return '';
   };
+  
+  const addSegment = (point1Id: string, point2Id: string) => {
+    const newSegment: Segment = {
+        id: crypto.randomUUID(),
+        type: 'segment',
+        point1Id,
+        point2Id,
+        color: 'hsl(var(--primary))'
+    };
+    setObjects(prev => [...prev, newSegment]);
+  };
+
+  const measureDistance = (point1Id: string, point2Id: string) => {
+      const p1 = objects.find(o => o.id === point1Id) as Point;
+      const p2 = objects.find(o => o.id === point2Id) as Point;
+      if (!p1 || !p2) return;
+
+      const dist = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+      const midX = (p1.x + p2.x) / 2;
+      const midY = (p1.y + p2.y) / 2;
+      
+      const newMeasurement: Measurement = {
+          id: crypto.randomUUID(),
+          type: 'measurement',
+          label: dist.toFixed(3),
+          x: midX,
+          y: midY,
+      };
+      setObjects(prev => [...prev, newMeasurement]);
+      toast({ title: `Distance: ${dist.toFixed(3)}` });
+  };
+
 
   const updateObject = (id: string, updates: Partial<GraphObject>) => {
     setObjects(prev => prev.map(obj => {
@@ -433,13 +549,28 @@ export function GraphCalculator() {
   };
 
   const deleteObject = (id: string) => {
-    // Also remove derived points that depend on a function being deleted
-    const objectToDelete = objects.find(o => o.id === id);
-    if (objectToDelete && objectToDelete.type === 'function') {
-        setObjects(prev => prev.filter(obj => obj.id !== id && !(obj.type === 'point' && (obj as Point).isDerived)));
-    } else {
-        setObjects(prev => prev.filter(obj => obj.id !== id));
-    }
+    setObjects(prev => {
+        const objectToDelete = prev.find(o => o.id === id);
+        let idsToDelete = new Set([id]);
+
+        // If a point is deleted, also delete segments connected to it
+        if (objectToDelete?.type === 'point') {
+            prev.forEach(obj => {
+                if (obj.type === 'segment' && (obj.point1Id === id || obj.point2Id === id)) {
+                    idsToDelete.add(obj.id);
+                }
+            });
+        }
+        // Also remove derived points that depend on a function being deleted
+        if (objectToDelete?.type === 'function') {
+            prev.forEach(obj => {
+                if(obj.type === 'point' && obj.isDerived) {
+                    idsToDelete.add(obj.id)
+                }
+            })
+        }
+        return prev.filter(obj => !idsToDelete.has(obj.id));
+    });
   };
   
   const handleSave = () => {

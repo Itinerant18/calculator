@@ -29,4 +29,21 @@ export type Slider = {
   value: number;
 };
 
-export type GraphObject = Point | Func | Slider;
+export type Segment = {
+    id: string;
+    type: 'segment';
+    point1Id: string;
+    point2Id: string;
+    color: string;
+};
+
+export type Measurement = {
+    id: string;
+    type: 'measurement';
+    label: string;
+    x: number;
+    y: number;
+};
+
+
+export type GraphObject = Point | Func | Slider | Segment | Measurement;

@@ -9,7 +9,7 @@ import { Slider as SliderComponent } from '@/components/ui/slider';
 import { Trash2, Plus } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import type { GraphObject, Func, Slider, Point } from '@/lib/graph-types';
+import type { GraphObject, Func, Slider, Point, Segment } from '@/lib/graph-types';
 
 export function GraphObjectsPanel({ 
   objects, 
@@ -69,6 +69,23 @@ export function GraphObjectsPanel({
                   <div key={point.id} className="flex justify-between items-center">
                      <span>{point.label}</span>
                      <Button variant="ghost" size="icon" onClick={() => deleteObject(point.id)} className='h-6 w-6'><Trash2 className="h-4 w-4" /></Button>
+                  </div>
+              );
+          })}
+           </div>
+        </div>
+        <Separator />
+        <div>
+          <Label className="text-lg font-semibold">Segments</Label>
+           <div className='space-y-1 mt-2 text-sm'>
+           {objects.filter(o => o.type === 'segment').map(obj => {
+              const segment = obj as Segment;
+              const p1 = objects.find(o => o.id === segment.point1Id) as Point;
+              const p2 = objects.find(o => o.id === segment.point2Id) as Point;
+              return (
+                  <div key={segment.id} className="flex justify-between items-center">
+                     <span>Segment {p1?.label} to {p2?.label}</span>
+                     <Button variant="ghost" size="icon" onClick={() => deleteObject(segment.id)} className='h-6 w-6'><Trash2 className="h-4 w-4" /></Button>
                   </div>
               );
           })}
