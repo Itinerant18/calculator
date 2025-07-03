@@ -81,8 +81,8 @@ export function ChatInterface() {
   };
 
   return (
-    <div className="flex flex-col h-full p-4 space-y-4">
-      <div className="flex justify-between items-center">
+    <div className="flex flex-col h-full">
+      <div className="flex justify-between items-center p-4 border-b">
         <h1 className="text-2xl font-bold">AI Math Assistant</h1>
         <Button onClick={handleSave} variant="outline" size="sm" disabled={messages.length === 0}>
             <Save className="h-4 w-4 mr-2" />
@@ -90,8 +90,8 @@ export function ChatInterface() {
         </Button>
       </div>
 
-      <ScrollArea className="flex-grow rounded-md border p-4" ref={scrollAreaRef}>
-        <div className="space-y-6">
+      <ScrollArea className="flex-grow" ref={scrollAreaRef}>
+        <div className="space-y-6 p-4">
           <AnimatePresence>
             {messages.map((message, index) => (
               <motion.div
@@ -110,10 +110,10 @@ export function ChatInterface() {
                   </Avatar>
                 )}
                 <div
-                  className={`max-w-xl rounded-lg p-3 text-sm ${
+                  className={`max-w-2xl rounded-lg p-3 text-sm shadow-md ${
                     message.role === "user"
                       ? "bg-primary text-primary-foreground"
-                      : "bg-muted"
+                      : "bg-card border"
                   }`}
                 >
                   <Latex>{message.content}</Latex>
@@ -147,18 +147,20 @@ export function ChatInterface() {
           </AnimatePresence>
         </div>
       </ScrollArea>
-      <form onSubmit={handleSubmit} className="flex items-center gap-2">
-        <Input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask a math or science question..."
-          className="flex-grow"
-          disabled={isLoading}
-        />
-        <Button type="submit" disabled={isLoading || !input.trim()}>
-          <Send className="h-4 w-4" />
-        </Button>
-      </form>
+      <div className="border-t p-4 bg-background">
+        <form onSubmit={handleSubmit} className="flex items-center gap-2">
+            <Input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Ask a math or science question..."
+            className="flex-grow"
+            disabled={isLoading}
+            />
+            <Button type="submit" disabled={isLoading || !input.trim()}>
+            <Send className="h-4 w-4" />
+            </Button>
+        </form>
+      </div>
     </div>
   );
 }

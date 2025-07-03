@@ -204,7 +204,7 @@ export function Calculator() {
   ];
 
   return (
-    <div className="p-4 rounded-3xl bg-background dark:bg-card space-y-4 shadow-neumorphic-light dark:shadow-neumorphic-dark w-full max-w-md">
+    <div className="p-4 rounded-3xl bg-card border shadow-lg space-y-4 w-full max-w-md">
       <div className="flex justify-between items-center px-2">
         <div className="flex items-center space-x-2">
             <Button
@@ -223,7 +223,7 @@ export function Calculator() {
         <Button variant="ghost" size="icon" onClick={handleSave} className="h-10 w-10"><Save className="h-5 w-5"/></Button>
       </div>
 
-      <div className="bg-background dark:bg-card shadow-neumorphic-light-inset dark:shadow-neumorphic-dark-inset rounded-xl p-4 text-right overflow-x-auto min-h-[72px] flex items-center justify-end">
+      <div className="bg-muted dark:bg-card shadow-inner rounded-xl p-4 text-right overflow-x-auto min-h-[72px] flex items-center justify-end">
         {isLoading ? 
             <Skeleton className="h-10 w-3/4" /> :
             <p className="text-5xl font-mono break-all">{display}</p>

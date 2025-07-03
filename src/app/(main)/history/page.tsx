@@ -59,7 +59,7 @@ const HistoryCard = ({ item, onShare, onDelete }: { item: HistoryItem, onShare: 
   };
 
   return (
-    <Card ref={cardRef} id={`history-card-${item.id}`}>
+    <Card ref={cardRef} id={`history-card-${item.id}`} className="shadow-md hover:shadow-lg transition-shadow">
       <CardHeader>
         <div className="flex justify-between items-start">
             <div className='flex items-center gap-3'>
@@ -143,15 +143,15 @@ export default function HistoryPage() {
         </div>
       
       {history.length === 0 ? (
-        <Card className="text-center p-8">
+        <Card className="text-center p-8 md:p-12 border-2 border-dashed">
             <CardHeader>
-                <div className='mx-auto bg-muted rounded-full p-3 w-fit'>
-                    <AlertTriangle className='h-8 w-8 text-muted-foreground'/>
+                <div className='mx-auto bg-muted rounded-full p-4 w-fit mb-4'>
+                    <AlertTriangle className='h-12 w-12 text-muted-foreground'/>
                 </div>
-                <CardTitle>No History Found</CardTitle>
+                <CardTitle className="text-2xl">No History Found</CardTitle>
             </CardHeader>
             <CardContent>
-                <p className="text-muted-foreground">Your saved calculations, chats, and map data will appear here.</p>
+                <p className="text-muted-foreground max-w-md mx-auto">Your saved calculations, chats, and graph data will appear here. Get started by using the calculator, chat, or graph tools!</p>
             </CardContent>
         </Card>
       ) : (

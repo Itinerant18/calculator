@@ -15,10 +15,10 @@ export default {
         code: ['monospace'],
       },
       boxShadow: {
-        'neumorphic-light': '5px 5px 10px #d4d4d4, -5px -5px 10px #ffffff',
-        'neumorphic-light-inset': 'inset 5px 5px 10px #d4d4d4, inset -5px -5px 10px #ffffff',
-        'neumorphic-dark': '5px 5px 10px #1f1f1f, -5px -5px 10px #2f2f2f',
-        'neumorphic-dark-inset': 'inset 5px 5px 10px #1f1f1f, inset -5px -5px 10px #2f2f2f',
+        'neumorphic-light': '4px 4px 8px #d9d9d9, -4px -4px 8px #ffffff',
+        'neumorphic-light-inset': 'inset 4px 4px 8px #d9d9d9, inset -4px -4px 8px #ffffff',
+        'neumorphic-dark': '4px 4px 8px #18181a, -4px -4px 8px #222224',
+        'neumorphic-dark-inset': 'inset 4px 4px 8px #18181a, inset -4px -4px 8px #222224',
       },
       colors: {
         background: 'hsl(var(--background))',
