@@ -52,7 +52,7 @@ interface GraphToolsSidebarProps {
 
 export function GraphToolsSidebar({ activeTool, setActiveTool }: GraphToolsSidebarProps) {
   return (
-    <div className="w-60 h-full flex flex-col bg-card border-r shrink-0">
+    <div className="h-full flex flex-col bg-card">
       <div className="p-4 border-b">
         <h2 className="text-lg font-bold">Tools</h2>
       </div>
